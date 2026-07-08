@@ -410,12 +410,13 @@ Für immer Deiner,</textarea>
   function showOnly(el){
     [composer, envScene, reading].forEach(s => {
       s.classList.remove('active');
-      s.style.removeProperty('display');
+      s.style.display = 'none'; // alle erstmal hart ausblenden
     });
     if(el === composer){
       el.style.display = 'block';
     } else {
-      el.classList.add('active'); // .env-scene.active / .reading.active regeln display selbst
+      el.style.removeProperty('display'); // Anzeigeart der CSS-Klasse überlassen (.active)
+      el.classList.add('active');
     }
   }
 
