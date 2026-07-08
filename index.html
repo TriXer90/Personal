@@ -56,6 +56,86 @@
     text-align:center;
   }
 
+  /* ---------- COMPOSE ---------- */
+  .composer{
+    width:100%;
+    background:linear-gradient(180deg, rgba(45,33,30,.92), rgba(30,22,20,.92));
+    border:1px solid rgba(184,146,79,.35);
+    border-radius:6px;
+    padding:32px 28px 26px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .composer h1{
+    font-family:'Great Vibes', cursive;
+    font-weight:400;
+    font-size:44px;
+    margin:0 0 4px;
+    color:var(--gold-soft);
+    text-align:center;
+  }
+  .composer p.sub{
+    text-align:center;
+    margin:0 0 26px;
+    font-style:italic;
+    color:var(--parchment-dark);
+    font-size:16px;
+  }
+  .field{margin-bottom:18px;}
+  .field label{
+    display:block;
+    font-size:13px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--gold-soft);
+    margin-bottom:6px;
+  }
+  .field input, .field textarea{
+    width:100%;
+    background:rgba(242,230,201,.06);
+    border:1px solid rgba(184,146,79,.4);
+    border-radius:3px;
+    color:var(--parchment);
+    font-family:'Cormorant Garamond', serif;
+    font-size:18px;
+    padding:10px 12px;
+    resize:vertical;
+  }
+  .field textarea{
+    font-family:'Caveat', cursive;
+    font-size:24px;
+    line-height:1.5;
+    min-height:220px;
+  }
+  .field input:focus, .field textarea:focus{
+    outline:2px solid var(--gold);
+    outline-offset:1px;
+  }
+  .btn-row{display:flex; gap:12px; margin-top:8px; flex-wrap:wrap;}
+  button{
+    font-family:'Cormorant Garamond', serif;
+    font-size:16px;
+    letter-spacing:.04em;
+    cursor:pointer;
+    border-radius:3px;
+    padding:12px 22px;
+    border:1px solid var(--gold);
+    background:transparent;
+    color:var(--gold-soft);
+    transition:background .2s ease, color .2s ease, transform .15s ease;
+    touch-action: manipulation;
+  }
+  button:hover{background:var(--gold); color:#241a10;}
+  button:active{transform:scale(.97);}
+  button.primary{
+    background:var(--wax);
+    border-color:var(--wax-light);
+    color:#f6e8dc;
+    flex:1;
+    min-width:220px;
+  }
+  button.primary:hover{background:var(--wax-light);}
+  button:focus-visible{outline:2px solid var(--gold-soft); outline-offset:2px;}
+
   /* ---------- ENVELOPE SCENE ---------- */
   .env-scene{ perspective:1400px; display:none; flex-direction:column; align-items:center; gap:22px; width:100%; }
   .env-scene.active{display:flex;}
@@ -244,6 +324,40 @@
 <div class="stage">
   <div class="eyebrow">Ein persönlicher Brief</div>
 
+  <!-- COMPOSE -->
+  <section class="composer" id="composer">
+    <h1>Schreib deine Zeilen</h1>
+    <p class="sub">Verfasse deinen Brief — er wird versiegelt, bereit zum Öffnen.</p>
+
+    <div class="field">
+      <label for="toName">Für wen ist der Brief?</label>
+      <input id="toName" type="text" placeholder="z. B. Meine Liebste" maxlength="60">
+    </div>
+
+    <div class="field">
+      <label for="salutation">Anrede</label>
+      <input id="salutation" type="text" placeholder="z. B. Meine Liebste," maxlength="60" value="Meine Liebste,">
+    </div>
+
+    <div class="field">
+      <label for="body">Dein Brief</label>
+      <textarea id="body" placeholder="Schreibe hier, was dein Herz bewegt...">Seit dem Moment, in dem ich dich kennengelernt habe, ist mein Leben heller geworden.
+
+Ich wollte dir nur sagen, wie sehr du mir fehlst, wie sehr ich mich auf jeden gemeinsamen Tag freue, und wie dankbar ich bin, dass es dich gibt.
+
+Für immer Deiner,</textarea>
+    </div>
+
+    <div class="field">
+      <label for="signature">Unterschrift</label>
+      <input id="signature" type="text" placeholder="z. B. Dein L." maxlength="40" value="Dein L.">
+    </div>
+
+    <div class="btn-row">
+      <button class="primary" id="sealBtn">Brief versiegeln</button>
+    </div>
+  </section>
+
   <!-- ENVELOPE -->
   <section class="env-scene" id="envScene">
     <div class="envelope-wrap">
@@ -265,6 +379,7 @@
       </div>
     </div>
     <p class="hint">Klicke auf das Siegel, um den Brief zu öffnen</p>
+    <button id="editFromEnvelope">Brief bearbeiten</button>
   </section>
 
   <!-- READING: nur noch der Brief selbst -->
@@ -283,6 +398,7 @@
 <script>
 (function(){
   const $ = (id) => document.getElementById(id);
+  const composer = $('composer');
   const envScene = $('envScene');
   const reading = $('reading');
   const flap = $('flap');
@@ -291,28 +407,37 @@
   const addressLine = $('addressLine');
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let pendingData = null; // die Brief-Daten, die beim nächsten Siegel-Klick geöffnet werden
 
-  // ---------------------------------------------------------
-  // Hier den Brief anpassen (fest hinterlegt, kein Formular mehr)
-  // ---------------------------------------------------------
-  const LETTER = {
-    to: 'Dich',
-    sal: 'Meine Liebste,',
-    body: `Seit dem Moment, in dem ich dich kennengelernt habe, ist mein Leben heller geworden.
+  function b64EncodeUnicode(str){
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m,p1)=>String.fromCharCode('0x'+p1)));
+  }
+  function b64DecodeUnicode(str){
+    return decodeURIComponent(Array.prototype.map.call(atob(str), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+  }
 
-Ich wollte dir nur sagen, wie sehr du mir fehlst, wie sehr ich mich auf jeden gemeinsamen Tag freue, und wie dankbar ich bin, dass es dich gibt.
-
-Für immer Deiner,`,
-    sig: 'Dein L.'
-  };
-
+  // Zeigt genau eine Sektion an, alle anderen werden hart ausgeblendet
+  // (display:none), damit nie mehrere Sektionen gleichzeitig sichtbar sind.
   function showOnly(el){
-    [envScene, reading].forEach(s => {
+    [composer, envScene, reading].forEach(s => {
       s.classList.remove('active');
       s.style.display = 'none';
     });
-    el.style.removeProperty('display');
-    el.classList.add('active');
+    if(el === composer){
+      el.style.display = 'block';
+    } else {
+      el.style.removeProperty('display'); // Anzeigeart der CSS-Klasse überlassen (.active)
+      el.classList.add('active');
+    }
+  }
+
+  function currentData(){
+    return {
+      to: $('toName').value.trim(),
+      sal: $('salutation').value.trim() || 'Meine Liebste,',
+      body: $('body').value,
+      sig: $('signature').value.trim() || 'Dein L.'
+    };
   }
 
   function resetSealVisual(){
@@ -321,34 +446,56 @@ Für immer Deiner,`,
     letterPeek.classList.remove('rise');
   }
 
-  function goToEnvelope(){
-    addressLine.textContent = 'Für ' + LETTER.to;
+  function goToEnvelope(data){
+    addressLine.textContent = data.to ? ('Für ' + data.to) : 'Für Dich';
     resetSealVisual();
     showOnly(envScene);
   }
 
-  function goToReading(){
-    $('readSalutation').textContent = LETTER.sal;
-    $('readBody').textContent = LETTER.body;
-    $('readSignature').textContent = LETTER.sig;
+  function goToReading(data){
+    $('readSalutation').textContent = data.sal;
+    $('readBody').textContent = data.body;
+    $('readSignature').textContent = data.sig;
     showOnly(reading);
     $('copiedMsg').textContent = '';
   }
 
-  function openEnvelope(){
+  function openEnvelope(data){
     if(reducedMotion){
-      goToReading();
+      goToReading(data);
       return;
     }
     seal.classList.add('cracked');
     setTimeout(() => { flap.classList.add('open'); }, 350);
     setTimeout(() => { letterPeek.classList.add('rise'); }, 700);
-    setTimeout(() => { goToReading(); }, 1750);
+    setTimeout(() => { goToReading(data); }, 1750);
   }
 
-  seal.addEventListener('click', openEnvelope);
+  // Beim Versiegeln: Brief in einen eindeutigen Link (Hash) kodieren und die
+  // Adresszeile aktualisieren, bevor zum Umschlag gewechselt wird.
+  $('sealBtn').addEventListener('click', () => {
+    const data = currentData();
+    try{
+      const encoded = b64EncodeUnicode(JSON.stringify(data));
+      history.replaceState(null, '', '#brief=' + encoded);
+    }catch(e){ /* falls Encoding scheitert, ohne Hash weitermachen */ }
+    pendingData = data;
+    goToEnvelope(data);
+  });
+
+  function triggerOpen(){
+    if(!pendingData) return;
+    openEnvelope(pendingData);
+  }
+  seal.addEventListener('click', triggerOpen);
   seal.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openEnvelope(); }
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); triggerOpen(); }
+  });
+
+  $('editFromEnvelope').addEventListener('click', () => {
+    history.replaceState(null, '', location.pathname);
+    pendingData = null;
+    showOnly(composer);
   });
 
   $('copyLinkBtn').addEventListener('click', async () => {
@@ -361,7 +508,26 @@ Für immer Deiner,`,
     }
   });
 
-  goToEnvelope();
+  // Beim Laden prüfen: eindeutiger Hash vorhanden? Dann direkt zum Umschlag
+  // springen (kein Composer) -- Klick aufs Siegel zeigt dann Animation + Brief.
+  function loadFromHash(){
+    const hash = location.hash;
+    const marker = '#brief=';
+    if(hash.startsWith(marker)){
+      try{
+        const encoded = hash.slice(marker.length);
+        const data = JSON.parse(b64DecodeUnicode(encoded));
+        pendingData = data;
+        goToEnvelope(data);
+        return true;
+      }catch(e){ /* fällt zurück auf den Composer */ }
+    }
+    return false;
+  }
+
+  if(!loadFromHash()){
+    showOnly(composer); // normaler Einstieg: Vorlage zum Schreiben
+  }
 })();
 </script>
 
